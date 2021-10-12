@@ -1,1 +1,2 @@
-# snow_drift_simulation
+# Snowdrift game simulation
+Snowdrift game simulation using SimPy.
