@@ -4,9 +4,9 @@ import random
 
 
 class State(Enum):
-    DIG = 0  # loses a lot of body heat
-    NO_ACTION = 1  # loses a bit of body heat? why would someone choose this option, it's stupid
-    TURN_ON_HEATER = 2  # gain body heat
+    DIG = 0
+    NO_ACTION = 1
+    TURN_ON_HEATER = 2
 
 
 class Human(object):
@@ -15,29 +15,26 @@ class Human(object):
         simulation.agents.append(self)
         self.state = State.NO_ACTION
         self.body_temperature = 37
+        self.energy = 100
         self.name = name
         self.simulation = simulation
 
     def is_alive(self):
         return self.body_temperature > 35.0
 
-    def step(self):
-        # while self.is_alive():
-        self.decide_what_to_do()
+    def update_agent(self):
         if self.state == State.DIG:
-            print(self.name + ": Digging")
-            self.simulation.snow_drift.get(1)
-            print("Snow drift size: " + str(self.simulation.snow_drift.level))
-            # reduce body heat
-            # reduce energy
+            i = 1
         elif self.state == State.NO_ACTION:
-            print(self.name + ": No action")
+            i = 1
         else:
-            print(self.name + ": Turning on heating")
+            i = 1
         yield self.env.timeout(0)
 
     def decide_what_to_do(self):
         self.state = random.choice(list(State))
+        print(self.name + ": " + str(self.state))
+        yield self.env.timeout(0)
 
 
 # TODO: this should be an interrupted shared process
