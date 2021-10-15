@@ -1,9 +1,6 @@
 import simpy
-from agents import Human, Car  # TODO: name stuff better
+from agents import Human  # TODO: name stuff better
 from simulation import Simulation
-
-# Setup
-# TODO: what are the parameters?
 
 # Run the simulation
 env = simpy.Environment()
