@@ -4,8 +4,6 @@ from agents import State
 import pandas as pd
 import numpy as np
 
-# TODO: decide what stuff to save
-
 
 class Simulation(object):
     def __init__(self, env):
@@ -14,7 +12,7 @@ class Simulation(object):
             env, init=25.0)  # TODO: use random size
         self.agents = []
         self.data = pd.DataFrame(
-            columns=['Agent', 'Step', 'Decision', 'Body temperature'])
+            columns=['Agent', 'Step', 'Decision', 'Body temperature', 'Energy', 'Car battery level', 'Snow drift size'])
 
     def get_number_of_agents(self):
         return len(self.agents)
@@ -38,22 +36,26 @@ class Simulation(object):
 
     def step(self, env):
         step = env.now
-
         for agent in self.agents:
             yield env.process(agent.decide_what_to_do())
 
         for agent in self.agents:
             yield env.process(agent.update_agent())
-            if(agent.state == State.DIG):
-                self.snow_drift.get(1)
-
-            entry = {'Agent': agent.name,
-                     'Step': step,
-                     'Decision': agent.state,
-                     'Body temperature': agent.body_temperature}
-            self.data = self.data.append(entry, ignore_index=True)
+            if(agent.state == State.DIGGING):
+                self.snow_drift.get(1)  # TODO: fix this to float
+            self.append_to_result(agent, step, self.snow_drift)
 
         print("Step: " + str(env.now))
-        print("Snow drift size: " + str(self.snow_drift.level))
+        print("Snow drift size: {:.2f}".format(self.snow_drift.level))
 
         yield env.timeout(1)
+
+    def append_to_result(self, agent, step, snow_drift):
+        entry = {'Agent': agent.name,
+                 'Step': step,
+                 'Decision': agent.state.name,
+                 'Body temperature': agent.body_temperature,
+                 'Energy': agent.energy,
+                 'Car battery level': agent.car.battery_level,
+                 'Snow drift size': snow_drift.level}
+        self.data = self.data.append(entry, ignore_index=True)
