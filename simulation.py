@@ -1,15 +1,18 @@
 import simpy
-import random
+from parameters import *
 from agents import State
 import pandas as pd
 import numpy as np
+import datetime
+
+FILE_PATH = "./simulation_results/"
+FILE_NAME = "random"
 
 
 class Simulation(object):
     def __init__(self, env):
-        snow_drift_size = random.randint(50, 100)
         self.snow_drift = simpy.Container(
-            env, init=25.0)  # TODO: use random size
+            env, init=SNOW_DRIFT_SIZE)
         self.agents = []
         self.data = pd.DataFrame(
             columns=['Agent', 'Step', 'Decision', 'Body temperature', 'Energy', 'Car battery level', 'Snow drift size'])
@@ -25,13 +28,11 @@ class Simulation(object):
             if agent.is_alive():
                 return False
         return True
-    # TODO: if an agent is dead, remove from list of agents?
 
     def run(self, env):
-        while not self.goal_reached():  # TODO: stop when all agents are dead? or when only 1 left because there is no game anymore?
+        while not self.goal_reached() or self.all_agents_dead():
             yield env.process(self.step(env))
-        self.data.to_csv(
-            r'./simulation_result.csv', index=False, header=True)
+        self.save_simulation_data()
         print(self.data)
 
     def step(self, env):
@@ -42,12 +43,11 @@ class Simulation(object):
         for agent in self.agents:
             yield env.process(agent.update_agent())
             if(agent.state == State.DIGGING):
-                self.snow_drift.get(1)  # TODO: fix this to float
+                # snow_shoveled = round(agent.energy*DIGGING_COEFFICIENT, 2)
+                # TODO: no floats, but figure out a better way to do this based on energy
+                self.snow_drift.get(1)
+                print(self.snow_drift.level)
             self.append_to_result(agent, step, self.snow_drift)
-
-        print("Step: " + str(env.now))
-        print("Snow drift size: {:.2f}".format(self.snow_drift.level))
-
         yield env.timeout(1)
 
     def append_to_result(self, agent, step, snow_drift):
@@ -59,3 +59,8 @@ class Simulation(object):
                  'Car battery level': agent.car.battery_level,
                  'Snow drift size': snow_drift.level}
         self.data = self.data.append(entry, ignore_index=True)
+
+    def save_simulation_data(self):
+        file_name = FILE_PATH + FILE_NAME + "_" + \
+            datetime.datetime.now().strftime("%d%m%Y_%H%M%S") + ".csv"
+        self.data.to_csv(file_name, index=False, header=True)

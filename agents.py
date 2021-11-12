@@ -1,10 +1,8 @@
 import simpy
 from enum import Enum
 import random
-
-MAX_BODY_TEMPERATURE = 37
-MAX_ENERGY = 100
-MAX_BATTERY_LEVEL = 100
+from car import Car
+from parameters import *
 
 
 class State(Enum):
@@ -13,36 +11,45 @@ class State(Enum):
     TURN_ON_HEATER = 2
 
 
-class Human(object):
+class Agent(object):
     def __init__(self, env, simulation, name):
         self.env = env
         self.simulation = simulation
         simulation.agents.append(self)
         self.name = name
         self.state = State.NO_ACTION
-        self.body_temperature = 37  # maybe a container to have an upper limit?
+        self.body_temperature = MAX_BODY_TEMPERATURE
         self.energy = MAX_ENERGY
         self.car = Car(self.env)
+        self.past_actions = []
+        random.seed(69)
 
     def is_alive(self):
         return self.body_temperature > 35.0
 
     def update_agent(self):
         if self.state == State.DIGGING:
-            self.decrease_body_temperature(0.02)
-            self.decrease_energy(1)
+            self.decrease_body_temperature(
+                BODY_TEMPERATURE_DECREASE_WHEN_DIGGING)
+            self.decrease_energy(ENERGY_DECREASE_WHEN_DIGGING)
         elif self.state == State.NO_ACTION:
-            # TODO: do what exactly, hmmm...
-            i = 1
+            self.decrease_body_temperature(
+                BODY_TEMPERATURE_DECREASE_WHEN_NO_ACTION)
+            self.increase_energy(ENERGY_INCREASE_WHEN_NO_ACTION)
         else:
-            self.increase_body_temperature(0.02)
-            self.increase_energy(1)
-            self.decrease_car_battery_level(1)
+            self.increase_body_temperature(
+                BODY_TEMPERATURE_INCREASE_WHEN_TURN_ON_HEATER)
+            self.increase_energy(ENERGY_INCREASE_WHEN_TURN_ON_HEATER)
+            self.car.decrease_battery_level()
         yield self.env.timeout(0)
 
     def decide_what_to_do(self):
+        # Make decision about what to
         self.state = random.choice(list(State))
-        print(self.name + ": " + str(self.state))
+
+        # Save decision in action history
+        self.past_actions.append(self.state)
+
         yield self.env.timeout(0)
 
     def increase_body_temperature(self, amount):
@@ -60,14 +67,15 @@ class Human(object):
 
     def decrease_energy(self, amount):
         self.energy -= amount
-
-    def decrease_car_battery_level(self, amount):
-        self.car.battery_level -= amount
-        if self.car.battery_level < 0:  # do we really need this check?
-            self.car.battery_level = 0
+        if self.energy < 0:
+            self.energy = 0
 
 
-class Car(object):
-    def __init__(self, env):
-        self.env = env
-        self.battery_level = MAX_BATTERY_LEVEL
+# TODO: implement Q-learning
+class SlightlySmarterAgent(Agent):
+    def decide_what_to_do(self):
+
+        # Save decision in action history
+        self.past_actions.append(self.state)
+
+        yield self.env.timeout(0)
