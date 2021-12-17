@@ -12,7 +12,7 @@ class State(Enum):
 
 
 class Agent(object):
-    def __init__(self, env, simulation, name):
+    def __init__(self, env, simulation, name, seed):
         self.env = env
         self.simulation = simulation
         simulation.agents.append(self)
@@ -22,7 +22,7 @@ class Agent(object):
         self.energy = MAX_ENERGY
         self.car = Car(self.env)
         self.past_actions = []
-        random.seed(69)
+        random.seed(seed)
 
     def is_alive(self):
         return self.body_temperature > 35.0
@@ -44,7 +44,7 @@ class Agent(object):
         yield self.env.timeout(0)
 
     def decide_what_to_do(self):
-        # Make decision about what to
+        # Make decision about what to do
         self.state = random.choice(list(State))
 
         # Save decision in action history
@@ -71,11 +71,30 @@ class Agent(object):
             self.energy = 0
 
 
-# TODO: implement Q-learning
-class SlightlySmarterAgent(Agent):
+class EpsilonGreedyQLearningMultiarmedBandit(Agent):
+    q_table = {}
+    rewards_for_step = {}
+
     def decide_what_to_do(self):
+        self.calculate_rewards_for_step()
+
+        # draw a 0 or 1 from a binomial distribution, with epsilon % likelihood of drawing a 1
+        explore = random.binomial(1, EPSILON)
+        if explore == 1 or len(self.past_actions) == 0:
+            # choose randomly between all arms
+            self.state = random.choice(list(State))
+        else:
+            # choose optimal arm
+            self.state = max(self.selected_actions,
+                             key=self.selected_actions.get)
 
         # Save decision in action history
-        self.past_actions.append(self.state)
+        self.past_actions[self.state] += 1
+
+        # Update Q-table
+        self.q_table[self.state] += 1/(self.past_actions[self.state]) * \
+            (self.rewards_for_step[self.state] - self.q_table[self.state])
 
         yield self.env.timeout(0)
+
+    # def calculate_rewards_for_step(self):

@@ -13,3 +13,9 @@ CAR_BATTERY_DECREASE_WHEN_TURN_ON_HEATER = 0.5
 
 SNOW_DRIFT_SIZE = 20
 DIGGING_COEFFICIENT = 0.7
+
+EPSILON = 0.3
+
+# TODO: 30 experiments with different seeds with common parameters (minimum, also experiment with parameters)
+# TODO: work on paper
+# TODO: epsilon greedy & q-learning separate
