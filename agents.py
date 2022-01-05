@@ -21,7 +21,6 @@ class Agent(object):
         self.body_temperature = MAX_BODY_TEMPERATURE
         self.energy = MAX_ENERGY
         self.car = Car(self.env)
-        self.past_actions = {}
         random.seed(seed)
 
     def is_alive(self):
@@ -50,9 +49,6 @@ class Agent(object):
         self.state = random.choice(list(State))
         print(self.name + " selected action " + str(self.state))
 
-        # Save decision in action history
-        # self.past_actions.append(self.state)
-
         yield self.env.timeout(0)
 
     def increase_body_temperature(self, amount):
@@ -72,6 +68,10 @@ class Agent(object):
         self.energy -= amount
         if self.energy < 0:
             self.energy = 0
+
+    def print_dictionary(self, dictionary):
+        for key, value in dictionary.items():
+            print(key, value)
 
 
 class EpsilonGreedyAgent(Agent):
@@ -160,18 +160,19 @@ class QLearningAgent(Agent):
 
     def update_q_table(self, snow_drift_decrease):
         print(self.name + " old Q-table: ")
-        for key, value in self.q_table.items():
-            print(key, value)
+        self.print_dictionary(self.q_table)
 
+        # Calculate actual reward
         reward = self.calculate_reward(snow_drift_decrease)
+        # Calculate maximum reward for the next step of the simulation
         max_expected_reward_for_next_step = self.get_biggest_expected_reward()
 
+        # Update Q-table
         self.q_table[self.state] = self.q_table.get(self.state, 0) + LEARNING_RATE * (
             reward + max_expected_reward_for_next_step - self.q_table.get(self.state, 0))
 
         print(self.name + " new Q-table: ")
-        for key, value in self.q_table.items():
-            print(key, value)
+        self.print_dictionary(self.q_table)
 
         yield self.env.timeout(0)
 
@@ -215,42 +216,70 @@ class QLearningAgent(Agent):
         return self.expected_reward_for_next_step[next_best_state]
 
     def calculate_expected_rewards_for_next_step(self):
-        # If state is DIGGING next turn, expected reward is equal to amount of snow drift decrease
-        self.expected_reward_for_next_step[State.DIGGING] = round(
-            self.energy*DIGGING_COEFFICIENT, 2)
-
-        print(self.name + " energy: " + str(self.energy))
-        print(self.name + " body temperature: " + str(self.body_temperature))
-        print(self.name + " car battery: " + str(self.car.battery_level))
-
-        # If state is not DIGGING, there is a chance of successful exploitation of each other agent in the simulation
-        self.expected_reward_for_next_step[State.NO_ACTION] = self.expected_reward_for_next_step.get(
-            State.NO_ACTION, 0) + len(self.simulation.agents)*EXPLOITATION_REWARD
-        self.expected_reward_for_next_step[State.TURN_ON_HEATER] = self.expected_reward_for_next_step.get(
-            State.TURN_ON_HEATER, 0) + len(self.simulation.agents)*EXPLOITATION_REWARD
-
-        # If state is NO_ACTION, expected maximum reward is snow drift decrease + energy saved reward and body heat gained reward (if applicable)
-        self.expected_reward_for_next_step[State.NO_ACTION] = round(
-            self.energy*DIGGING_COEFFICIENT, 2)
-
-        if self.energy < ENERGY_SAVING_THRESHOLD:
-            self.expected_reward_for_next_step[State.NO_ACTION] = self.expected_reward_for_next_step.get(
-                State.NO_ACTION, 0) + ENERGY_SAVING_REWARD
-        if self.body_temperature < BODY_TEMPERATURE_SAVING_THRESHOLD and self.car.battery_level > 1:
-            self.expected_reward_for_next_step[State.NO_ACTION] = self.expected_reward_for_next_step.get(
-                State.NO_ACTION, 0) + BODY_TEMPERATURE_SAVING_REWARD
-
-        # If state is TURN_ON_HEATER, expected maximum reward is snow drift decrease + energy saved reward and body heat gained reward (if applicable)
-        self.expected_reward_for_next_step[State.TURN_ON_HEATER] = round(
-            self.energy*DIGGING_COEFFICIENT, 2)
-
-        if self.energy < ENERGY_SAVING_THRESHOLD:
-            self.expected_reward_for_next_step[State.TURN_ON_HEATER] = self.expected_reward_for_next_step.get(
-                State.TURN_ON_HEATER, 0) + ENERGY_SAVING_REWARD
-        if self.body_temperature < BODY_TEMPERATURE_SAVING_THRESHOLD and self.car.battery_level > 1:
-            self.expected_reward_for_next_step[State.TURN_ON_HEATER] = self.expected_reward_for_next_step.get(
-                State.TURN_ON_HEATER, 0) + BODY_TEMPERATURE_SAVING_REWARD
+        self.calculate_expected_reward_when_digging()
+        self.calculate_expected_reward_when_no_action()
+        self.calculate_expected_reward_when_turn_on_heating()
 
         print(self.name + " expected rewards for next step: ")
-        for key, value in self.expected_reward_for_next_step.items():
-            print(key, value)
+        self.print_dictionary(self.expected_reward_for_next_step)
+
+    def calculate_expected_reward_when_digging(self):
+        # If state is DIGGING next turn,
+        # expected reward is equal to amount of possible snow drift decrease
+        # which is maximal when all the agents choose to dig
+        maximum_reward_when_collaborating = 0
+        for agent in self.simulation.agents:
+            maximum_reward_when_collaborating = maximum_reward_when_collaborating + \
+                round(agent.energy*DIGGING_COEFFICIENT, 2)
+        self.expected_reward_for_next_step[State.DIGGING] = maximum_reward_when_collaborating
+
+    def calculate_expected_reward_when_no_action(self):
+        # If state is NO_ACTION,
+        # expected maximum reward is snow drift decrease by other agents
+        # + successful exploitation reward for each other agent
+        # + energy saved reward if energy must be saved
+        # + body heat gained reward if body temperature must be saved
+        maximum_reward_when_no_action = 0
+
+        for agent in self.simulation.agents:
+            if agent != self:
+                maximum_reward_when_no_action = maximum_reward_when_no_action + \
+                    round(agent.energy*DIGGING_COEFFICIENT, 2)
+
+        maximum_reward_when_no_action = maximum_reward_when_no_action + \
+            (len(self.simulation.agents)-1)*EXPLOITATION_REWARD
+
+        if self.energy < ENERGY_SAVING_THRESHOLD:
+            maximum_reward_when_no_action = maximum_reward_when_no_action + ENERGY_SAVING_REWARD
+
+        if self.body_temperature < BODY_TEMPERATURE_SAVING_THRESHOLD:
+            maximum_reward_when_no_action = maximum_reward_when_no_action + \
+                BODY_TEMPERATURE_SAVING_REWARD
+
+        self.expected_reward_for_next_step[State.NO_ACTION] = maximum_reward_when_no_action
+
+    def calculate_expected_reward_when_turn_on_heating(self):
+        # If state is TURN_ON_HEATING,
+        # expected maximum reward is snow drift decrease by other agents
+        # + successful exploitation reward for each other agent
+        # + energy saved reward if energy must be saved
+        # + body heat gained reward if body temperature must be saved
+        maximum_reward_when_turn_on_heating = 0
+
+        for agent in self.simulation.agents:
+            if agent != self:
+                maximum_reward_when_turn_on_heating = maximum_reward_when_turn_on_heating + \
+                    round(agent.energy*DIGGING_COEFFICIENT, 2)
+
+        maximum_reward_when_turn_on_heating = maximum_reward_when_turn_on_heating + \
+            (len(self.simulation.agents)-1)*EXPLOITATION_REWARD
+
+        if self.energy < ENERGY_SAVING_THRESHOLD:
+            maximum_reward_when_turn_on_heating = maximum_reward_when_turn_on_heating + \
+                ENERGY_SAVING_REWARD
+
+        if self.body_temperature < BODY_TEMPERATURE_SAVING_THRESHOLD and self.car.battery_level > 1:
+            maximum_reward_when_turn_on_heating = maximum_reward_when_turn_on_heating + \
+                BODY_TEMPERATURE_SAVING_REWARD
+
+        self.expected_reward_for_next_step[State.TURN_ON_HEATER] = maximum_reward_when_turn_on_heating
